@@ -193,6 +193,7 @@ public class MapSplit {
      * @return the tile y number
      */
     private int lat2tileY(double lat) {
+        lat = Math.max(Math.min(lat, Const.MAX_LAT), Const.MIN_LAT);
         return (int) Math.floor(
                 (1.0 - Math.log(Math.tan(lat * Math.PI / 180.0) + 1.0 / Math.cos(lat * Math.PI / 180.0)) / Math.PI) / 2.0 * Math.pow(2.0, params.zoom));
     }
@@ -214,10 +215,10 @@ public class MapSplit {
         double dx = r - l;
         double dy = b - t;
 
-        l -= params.border * dx;
-        r += params.border * dx;
-        t -= params.border * dy;
-        b += params.border * dy;
+        l = Math.max(l - params.border * dx, -180);
+        r = Math.min(r + params.border * dx, +180);
+        t = Math.min(t - params.border * dy, Const.MAX_LAT);
+        b = Math.max(b + params.border * dy, Const.MIN_LAT);
 
         return new Bound(r, l, t, b, MAPSPLIT_TAG);
     }
@@ -390,18 +391,21 @@ public class MapSplit {
         int tileY = lat2tileY(lat);
         int neighbour = OsmMap.NEIGHBOURS_NONE;
 
+        /* TODO: set the tile across the 180° boundary as an additional neighbor
+         * instead skipping it with the lon + dx < 180, lat + dy > -180 checks */
+
         // check and add border if needed
         double dx = deltaX(lon);
-        if (lon2tileX(lon + dx) > tileX) {
+        if (lon + dx < 180 && lon2tileX(lon + dx) > tileX) {
             neighbour = OsmMap.NEIGHBOURS_EAST;
-        } else if (lon2tileX(lon - dx) < tileX) {
+        } else if (lon - dx > -180 && lon2tileX(lon - dx) < tileX) {
             tileX--;
             neighbour = OsmMap.NEIGHBOURS_EAST;
         }
         double dy = deltaY(lat);
-        if (lat2tileY(lat + dy) > tileY) {
+        if (lat + dy < Const.MAX_LAT && lat2tileY(lat + dy) > tileY) {
             neighbour += OsmMap.NEIGHBOURS_SOUTH;
-        } else if (lat2tileY(lat - dy) < tileY) {
+        } else if (lat - dy > Const.MIN_LAT && lat2tileY(lat - dy) < tileY) {
             tileY--;
             neighbour += OsmMap.NEIGHBOURS_SOUTH;
         }
