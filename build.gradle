@@ -69,6 +69,7 @@ dependencies {
     compile 'org.imintel:mbtiles4j:1.1.0'
     compile 'org.jetbrains:annotations:15.0'
     compile 'com.zaxxer:SparseBitSet:1.1'
+    compile 'net.sf.trove4j:trove4j:3.0.3'
     testCompile 'junit:junit:4.12'
 }
 

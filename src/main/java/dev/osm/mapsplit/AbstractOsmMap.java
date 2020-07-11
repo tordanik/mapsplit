@@ -5,10 +5,11 @@ import static java.util.stream.Collectors.toList;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
 
 import org.jetbrains.annotations.NotNull;
+
+import gnu.trove.set.TIntSet;
+import gnu.trove.set.hash.TIntHashSet;
 
 //@formatter:off
 /**
@@ -96,7 +97,7 @@ abstract public class AbstractOsmMap implements OsmMap {
 
         if ((value & TILE_EXT_MASK) != 0) {
             int idx = (int) (value & TILE_MARKER_MASK);
-            result = new ArrayList<Integer>(asList(extendedSets.getExtendedSet(idx)));
+            result = new ArrayList<Integer>(asList(extendedSets.getExtendedSet(idx).toArray()));
         } else {
             result = parseMarker(value);
         }
@@ -164,9 +165,9 @@ abstract public class AbstractOsmMap implements OsmMap {
         // neighbour list is already too large so we use the "large store"
         if ((val & TILE_EXT_MASK) != 0) {
             int idx = (int) (val & TILE_MARKER_MASK);
-            int[] oldSet = extendedSets.getExtendedSet(idx);
-            int[] addedSet = decode(tiles);
-            int[] newSet = merge(oldSet, addedSet);
+            TIntSet oldSet = extendedSets.getExtendedSet(idx);
+            TIntSet addedSet = decode(tiles);
+            TIntSet newSet = merge(oldSet, addedSet);
             int newSetIndex = extendedSets.addExtendedSet(newSet);
             val |= TILE_EXT_MASK;
             val &= ~TILE_MARKER_MASK; // delete old marker from val
@@ -175,7 +176,7 @@ abstract public class AbstractOsmMap implements OsmMap {
         }
 
         // create a expanded temp set for neighbourhood tiles
-        Collection<Integer> expanded = new TreeSet<Integer>();
+        TIntSet expanded = new TIntHashSet();
         for (long tile : tiles) {
 
             int x = tileX(tile);
@@ -197,7 +198,7 @@ abstract public class AbstractOsmMap implements OsmMap {
 
         // now we use the 24 reserved bits for the tiles list..
         boolean extend = false;
-        for (int tile : expanded) {
+        for (int tile : expanded.toArray()) {
 
             int tmpX = TileCoord.decodeX(tile);
             int tmpY = TileCoord.decodeY(tile);
@@ -256,7 +257,7 @@ abstract public class AbstractOsmMap implements OsmMap {
             val &= ~TILE_MARKER_MASK;
         }
 
-        int[] tileSet = decode(tiles);
+        TIntSet tileSet = decode(tiles);
         int extendedSetIndex = extendedSets.addExtendedSet(tileSet);
 
         val |= TILE_EXT_MASK;
@@ -266,28 +267,28 @@ abstract public class AbstractOsmMap implements OsmMap {
     }
 
     /** transforms a list of map values into a list of integer tile coords (using {@link TileCoord} encoding) */
-    private int[] decode(@NotNull Collection<Long> tiles) {
+    private TIntSet decode(@NotNull Collection<Long> tiles) {
 
-        Set<Integer> set = new TreeSet<>();
+        TIntSet result = new TIntHashSet(tiles.size() * 4);
 
         for (long l : tiles) {
             int tx = tileX(l);
             int ty = tileY(l);
             int neighbour = neighbour(l);
 
-            set.add(TileCoord.encode(tx, ty));
+            result.add(TileCoord.encode(tx, ty));
             if ((neighbour & NEIGHBOURS_EAST) != 0) {
-                set.add(TileCoord.encode(tx + 1, ty));
+                result.add(TileCoord.encode(tx + 1, ty));
             }
             if ((neighbour & NEIGHBOURS_SOUTH) != 0) {
-                set.add(TileCoord.encode(tx, ty + 1));
+                result.add(TileCoord.encode(tx, ty + 1));
             }
             if (neighbour == NEIGHBOURS_SOUTH_EAST) {
-                set.add(TileCoord.encode(tx + 1, ty + 1));
+                result.add(TileCoord.encode(tx + 1, ty + 1));
             }
         }
 
-        return set.stream().mapToInt(i -> i).toArray();
+        return result;
 
     }
 
@@ -313,36 +314,15 @@ abstract public class AbstractOsmMap implements OsmMap {
     }
 
     /**
-     * Merge two int arrays, removing dupes
+     * Merge two sets of ints, removing dupes
      * 
-     * @param old the original array
-     * @param add the additional array
-     * @return the new array
+     * @param old the original set
+     * @param add the additional set
+     * @return the new set
      */
-    private static int[] merge(@NotNull int[] old, @NotNull int[] add) {
-        int curLen = old.length;
-        int[] tmp = new int[curLen + add.length];
-        System.arraycopy(old, 0, tmp, 0, old.length);
-
-        for (int i = 0; i < add.length; i++) {
-            int toAdd = add[i];
-            boolean contained = false;
-
-            for (int j = 0; j < curLen; j++) {
-                if (toAdd == tmp[j]) {
-                    contained = true;
-                    break;
-                }
-            }
-
-            if (!contained) {
-                tmp[curLen++] = toAdd;
-            }
-        }
-
-        int[] result = new int[curLen];
-        System.arraycopy(tmp, 0, result, 0, curLen);
-
+    private static TIntSet merge(@NotNull TIntSet old, @NotNull TIntSet add) {
+        TIntSet result = new TIntHashSet(old);
+        result.addAll(add);
         return result;
     }
 

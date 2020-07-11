@@ -1,7 +1,8 @@
 package dev.osm.mapsplit;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+
+import gnu.trove.set.TIntSet;
 
 /**
  * an automatically growing collection of extended tile sets. Used by {@link AbstractOsmMap}.
@@ -14,20 +15,20 @@ class ExtendedTileSetStore {
     private static final int INITIAL_EXTENDED_SET_SIZE = 1000;
 
     private int size = 0;
-    private int[][] sets = new int[INITIAL_EXTENDED_SET_SIZE][];
+    private TIntSet[] sets = new TIntSet[INITIAL_EXTENDED_SET_SIZE];
 
     /** returns the set for a given index */
-    public int[] getExtendedSet(int index) {
+    public TIntSet getExtendedSet(int index) {
         return sets[index];
     }
 
     /** adds an extended set and returns the index assigned to it */
-    public int addExtendedSet(int[] newSet) {
+    public int addExtendedSet(TIntSet newSet) {
 
         if (newSet == null) throw new NullPointerException();
 
         // check if it equals the most recently added set
-        if (size > 0 && Arrays.equals(sets[size - 1], newSet)) {
+        if (size > 0 && sets[size - 1].equals(newSet)) {
             return size - 1;
         }
 
@@ -38,7 +39,7 @@ class ExtendedTileSetStore {
             if (sets.length >= AbstractOsmMap.TILE_MARKER_MASK / 2) { // assumes TILE_MARKER_MASK starts at 0
                 throw new IllegalStateException("Too many extended tile entries to expand");
             }
-            int[][] tmp = new int[2 * sets.length][];
+            TIntSet[] tmp = new TIntSet[2 * sets.length];
             System.arraycopy(sets, 0, tmp, 0, sets.length);
             sets = tmp;
         }
