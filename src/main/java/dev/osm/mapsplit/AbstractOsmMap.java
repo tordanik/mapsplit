@@ -1,5 +1,8 @@
 package dev.osm.mapsplit;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -205,6 +208,27 @@ abstract public class AbstractOsmMap implements OsmMap {
         val |= (long) extendedSetIndex;
 
         return val;
+    }
+
+    public void printDebugInfo() {
+
+        long entriesWithAddedNeighbors = keys().filter(key -> (get(key) & TILE_EXT_MASK) != 0).count();
+        long entriesWithExtendedSet = keys().filter(key -> (get(key) & TILE_MARKER_MASK) != 0).count();
+
+        System.out.println("entriesWithAddedNeighbors: " + entriesWithAddedNeighbors);
+        System.out.println("entriesWithExtendedSet: " + entriesWithExtendedSet);
+
+        try (PrintStream stream = new PrintStream(new File("/tmp/extendedStats"))) {
+
+            keys().filter(key -> (get(key) & TILE_EXT_MASK) != 0).forEach(key -> {
+                TIntSet tileArray = extendedSets.getExtendedSet((int) (get(key) & TILE_MARKER_MASK));
+                stream.println(key + "," + tileArray.size());
+            });
+
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+
     }
 
     /** transforms a map value into a list of integer tile coords (using {@link TileCoord} encoding) */

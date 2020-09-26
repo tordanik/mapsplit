@@ -683,6 +683,7 @@ public class MapSplit {
                         wCount++;
                         if ((wCount % (wmap.getCapacity() / 20)) == 0) {
                             LOGGER.log(Level.INFO, "{0} ways processed", wCount);
+                            ((AbstractOsmMap)wmap).printDebugInfo();
                         }
                     }
                 } else if (ec instanceof RelationContainer) {
