@@ -3,6 +3,7 @@ package dev.osm.mapsplit;
 import static java.util.stream.Collectors.toList;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.TreeSet;
@@ -50,15 +51,13 @@ abstract public class AbstractOsmMap implements OsmMap {
 
     private static final int   TILE_EXT_SHIFT            = 24;
     private static final long  TILE_EXT_MASK             = 1l << TILE_EXT_SHIFT;
-    private static final long  TILE_MARKER_MASK          = 0xFFFFFFl;
+    static final long          TILE_MARKER_MASK          = 0xFFFFFFl;
     private static final int   NEIGHBOUR_SHIFT           = TILE_EXT_SHIFT + 1;
     private static final long  NEIGHBOUR_MASK            = 3l << NEIGHBOUR_SHIFT;
     private static final int   ONE_BIT_SHIFT             = 31;
     private static final long  ONE_BIT_MASK              = 1l << ONE_BIT_SHIFT;
-    private static final int   INITIAL_EXTENDED_SET_SIZE = 1000;
 
-    private int     extendedBuckets = 0;
-    private int[][] extendedSet     = new int[INITIAL_EXTENDED_SET_SIZE][];
+    private final ExtendedTileSetStore extendedSets = new ExtendedTileSetStore();
 
     @Override
     public int tileX(long value) {
@@ -97,7 +96,7 @@ abstract public class AbstractOsmMap implements OsmMap {
 
         if ((value & TILE_EXT_MASK) != 0) {
             int idx = (int) (value & TILE_MARKER_MASK);
-            result = new ArrayList<Integer>(asList(extendedSet[idx]));
+            result = new ArrayList<Integer>(asList(extendedSets.getExtendedSet(idx)));
         } else {
             result = parseMarker(value);
         }
@@ -165,8 +164,14 @@ abstract public class AbstractOsmMap implements OsmMap {
         // neighbour list is already too large so we use the "large store"
         if ((val & TILE_EXT_MASK) != 0) {
             int idx = (int) (val & TILE_MARKER_MASK);
-            appendNeighbours(idx, tiles);
-            return originalValue;
+            int[] oldSet = extendedSets.getExtendedSet(idx);
+            int[] addedSet = decode(tiles);
+            int[] newSet = merge(oldSet, addedSet);
+            int newSetIndex = extendedSets.addExtendedSet(newSet);
+            val |= TILE_EXT_MASK;
+            val &= ~TILE_MARKER_MASK; // delete old marker from val
+            val |= (long) newSetIndex;
+            return val;
         }
 
         // create a expanded temp set for neighbourhood tiles
@@ -251,36 +256,18 @@ abstract public class AbstractOsmMap implements OsmMap {
             val &= ~TILE_MARKER_MASK;
         }
 
-        int cur = extendedBuckets++;
+        int[] tileSet = decode(tiles);
+        int extendedSetIndex = extendedSets.addExtendedSet(tileSet);
 
-        // if we don't have enough sets, increase the array...
-        if (cur >= extendedSet.length) {
-            if (extendedSet.length >= TILE_MARKER_MASK / 2) { // assumes TILE_MARKER_MASK starts at 0
-                throw new IllegalStateException("Too many extended tile entries to expand");
-            }
-            int[][] tmp = new int[2 * extendedSet.length][];
-            System.arraycopy(extendedSet, 0, tmp, 0, extendedSet.length);
-            extendedSet = tmp;
-        }
-
-        val |= 1l << TILE_EXT_SHIFT;
-        val |= (long) cur;
-
-        extendedSet[cur] = new int[0];
-
-        appendNeighbours(cur, tiles);
+        val |= TILE_EXT_MASK;
+        val |= (long) extendedSetIndex;
 
         return val;
     }
 
-    /**
-     * Add tiles to the extended tile list for an element
-     * 
-     * @param index the index in to the array of the tile lists
-     * @param tiles a List containing the tile numbers
-     */
-    private void appendNeighbours(int index, @NotNull Collection<Long> tiles) {
-        int[] old = extendedSet[index];
+    /** transforms a list of map values into a list of integer tile coords (using {@link TileCoord} encoding) */
+    private int[] decode(@NotNull Collection<Long> tiles) {
+
         int[] set = new int[4 * tiles.size()];
         int pos = 0;
 
@@ -301,8 +288,8 @@ abstract public class AbstractOsmMap implements OsmMap {
             }
         }
 
-        int[] result = merge(old, set, pos);
-        extendedSet[index] = result;
+        return Arrays.copyOfRange(set, 0, pos);
+
     }
 
     private List<Integer> parseMarker(long value) {
@@ -331,15 +318,14 @@ abstract public class AbstractOsmMap implements OsmMap {
      * 
      * @param old the original array
      * @param add the additional array
-     * @param len the additional number of ints to allocate
      * @return the new array
      */
-    private static int[] merge(@NotNull int[] old, @NotNull int[] add, int len) {
+    private static int[] merge(@NotNull int[] old, @NotNull int[] add) {
         int curLen = old.length;
-        int[] tmp = new int[curLen + len];
+        int[] tmp = new int[curLen + add.length];
         System.arraycopy(old, 0, tmp, 0, old.length);
 
-        for (int i = 0; i < len; i++) {
+        for (int i = 0; i < add.length; i++) {
             int toAdd = add[i];
             boolean contained = false;
 
