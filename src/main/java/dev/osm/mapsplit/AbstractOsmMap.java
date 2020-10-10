@@ -3,9 +3,9 @@ package dev.osm.mapsplit;
 import static java.util.stream.Collectors.toList;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.TreeSet;
 
 import org.jetbrains.annotations.NotNull;
@@ -268,27 +268,26 @@ abstract public class AbstractOsmMap implements OsmMap {
     /** transforms a list of map values into a list of integer tile coords (using {@link TileCoord} encoding) */
     private int[] decode(@NotNull Collection<Long> tiles) {
 
-        int[] set = new int[4 * tiles.size()];
-        int pos = 0;
+        Set<Integer> set = new TreeSet<>();
 
         for (long l : tiles) {
             int tx = tileX(l);
             int ty = tileY(l);
             int neighbour = neighbour(l);
 
-            set[pos++] = TileCoord.encode(tx, ty);
+            set.add(TileCoord.encode(tx, ty));
             if ((neighbour & NEIGHBOURS_EAST) != 0) {
-                set[pos++] = TileCoord.encode(tx + 1, ty);
+                set.add(TileCoord.encode(tx + 1, ty));
             }
             if ((neighbour & NEIGHBOURS_SOUTH) != 0) {
-                set[pos++] = TileCoord.encode(tx, ty + 1);
+                set.add(TileCoord.encode(tx, ty + 1));
             }
             if (neighbour == NEIGHBOURS_SOUTH_EAST) {
-                set[pos++] = TileCoord.encode(tx + 1, ty + 1);
+                set.add(TileCoord.encode(tx + 1, ty + 1));
             }
         }
 
-        return Arrays.copyOfRange(set, 0, pos);
+        return set.stream().mapToInt(i -> i).toArray();
 
     }
 
