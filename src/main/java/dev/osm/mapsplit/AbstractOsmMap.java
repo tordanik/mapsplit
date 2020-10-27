@@ -93,34 +93,16 @@ abstract public class AbstractOsmMap implements OsmMap {
             return null;
         }
 
-        int tx = tileX(value);
-        int ty = tileY(value);
-        int neighbour = neighbour(value);
-
-        TIntList result;
-
         if ((value & TILE_EXT_MASK) != 0) {
             int idx = (int) (value & TILE_MARKER_MASK);
-            result = new TIntArrayList(extendedSets.getExtendedSet(idx));
+            return new TIntArrayList(extendedSets.getExtendedSet(idx));
         } else {
-            result = parseMarker(value);
+            TIntList result = parseMarker(value);
+            // TODO: some tiles (neighbour-tiles) might be double-included in the list, is this a problem?!
+            result.addAll(decode(value));
+            return result;
         }
 
-        // TODO: some tiles (neighbour-tiles) might be double-included in the list, is this a problem?!
-
-        // add the tile (and possible neighbours)
-        result.add(TileCoord.encode(tx, ty));
-        if ((neighbour & OsmMap.NEIGHBOURS_EAST) != 0) {
-            result.add(TileCoord.encode(tx + 1, ty));
-        }
-        if ((neighbour & OsmMap.NEIGHBOURS_SOUTH) != 0) {
-            result.add(TileCoord.encode(tx, ty + 1));
-        }
-        if ((neighbour & OsmMap.NEIGHBOURS_SOUTH_EAST) == OsmMap.NEIGHBOURS_SOUTH_EAST) {
-            result.add(TileCoord.encode(tx + 1, ty + 1));
-        }
-
-        return result;
     }
 
     @Override
@@ -249,6 +231,8 @@ abstract public class AbstractOsmMap implements OsmMap {
 
         TIntSet tileSet = decode(tiles);
 
+        tileSet.addAll(decode(val));
+
         if ((val & TILE_MARKER_MASK) != 0) {
             // add current stuff to tile set
             tileSet.addAll(parseMarker(val));
@@ -264,32 +248,48 @@ abstract public class AbstractOsmMap implements OsmMap {
         return val;
     }
 
-    /** transforms a list of map values into a list of integer tile coords (using {@link TileCoord} encoding) */
-    private TIntSet decode(@NotNull Collection<Long> tiles) {
-
-        TIntSet result = new TIntHashSet(tiles.size() * 4);
-
-        for (long l : tiles) {
-            int tx = tileX(l);
-            int ty = tileY(l);
-            int neighbour = neighbour(l);
-
-            result.add(TileCoord.encode(tx, ty));
-            if ((neighbour & NEIGHBOURS_EAST) != 0) {
-                result.add(TileCoord.encode(tx + 1, ty));
-            }
-            if ((neighbour & NEIGHBOURS_SOUTH) != 0) {
-                result.add(TileCoord.encode(tx, ty + 1));
-            }
-            if (neighbour == NEIGHBOURS_SOUTH_EAST) {
-                result.add(TileCoord.encode(tx + 1, ty + 1));
-            }
-        }
-
+    /** transforms a map value into a list of integer tile coords (using {@link TileCoord} encoding) */
+    TIntSet decode(long value) {
+        TIntSet result = new TIntHashSet(4);
+        decode(value, result);
         return result;
-
     }
 
+    /**
+     * transforms a list of map values into a list of integer tile coords (using {@link TileCoord} encoding).
+     * The result is the union of applying {@link #decode(long)} to each value.
+     */
+    TIntSet decode(@NotNull Collection<Long> tiles) {
+        TIntSet result = new TIntHashSet(tiles.size() * 4);
+        for (long l : tiles) {
+            decode(l, result);
+        }
+        return result;
+    }
+
+    /**
+     * shared implementation of {@link #decode(long)} and {@link #decode(Collection)},
+     * adds results to an existing set
+     */
+    private void decode(long value, TIntSet resultSet) {
+
+        int tx = tileX(value);
+        int ty = tileY(value);
+        int neighbour = neighbour(value);
+
+        resultSet.add(TileCoord.encode(tx, ty));
+        if ((neighbour & NEIGHBOURS_EAST) != 0) {
+            resultSet.add(TileCoord.encode(tx + 1, ty));
+        }
+        if ((neighbour & NEIGHBOURS_SOUTH) != 0) {
+            resultSet.add(TileCoord.encode(tx, ty + 1));
+        }
+        if (neighbour == NEIGHBOURS_SOUTH_EAST) {
+            resultSet.add(TileCoord.encode(tx + 1, ty + 1));
+        }
+
+    }
+    
     private TIntList parseMarker(long value) {
         TIntList result = new TIntArrayList();
         int tx = tileX(value);
