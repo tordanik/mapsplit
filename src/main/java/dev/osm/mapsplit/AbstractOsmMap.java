@@ -1,9 +1,6 @@
 package dev.osm.mapsplit;
 
-import static java.util.stream.Collectors.toList;
-
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -105,21 +102,6 @@ abstract public class AbstractOsmMap implements OsmMap {
 
     }
 
-    @Override
-    public void updateInt(long key, TIntCollection tiles) {
-
-        List<Long> longTiles = Arrays.stream(tiles.toArray())
-                .mapToLong(tile -> createValue(
-                        TileCoord.decodeX(tile),
-                        TileCoord.decodeY(tile),
-                        NEIGHBOURS_NONE))
-                .boxed()
-                .collect(toList());
-
-        this.update(key, longTiles);
-
-    }
-
     /**
      * creates a value (representing a set of tile coords) from a pair of x/y tile coords and maybe some neighbors
      * 
@@ -142,7 +124,7 @@ abstract public class AbstractOsmMap implements OsmMap {
      * 
      * @return  the updated value
      */
-    protected long updateValue(long originalValue, @NotNull Collection<Long> tiles) {
+    protected long updateValue(long originalValue, @NotNull TIntCollection tiles) {
 
         long val = originalValue;
 
@@ -153,8 +135,7 @@ abstract public class AbstractOsmMap implements OsmMap {
         if ((val & TILE_EXT_MASK) != 0) {
             int idx = (int) (val & TILE_MARKER_MASK);
             TIntSet oldSet = extendedSets.getExtendedSet(idx);
-            TIntSet addedSet = decode(tiles);
-            TIntSet newSet = merge(oldSet, addedSet);
+            TIntSet newSet = merge(oldSet, tiles);
             int newSetIndex = extendedSets.addExtendedSet(newSet);
             val |= TILE_EXT_MASK;
             val &= ~TILE_MARKER_MASK; // delete old marker from val
@@ -162,30 +143,9 @@ abstract public class AbstractOsmMap implements OsmMap {
             return val;
         }
 
-        // create a expanded temp set for neighbourhood tiles
-        TIntSet expanded = new TIntHashSet();
-        for (long tile : tiles) {
-
-            int x = tileX(tile);
-            int y = tileY(tile);
-            int neighbour = neighbour(tile);
-
-            expanded.add(TileCoord.encode(x, y));
-
-            if ((neighbour & NEIGHBOURS_EAST) != 0) {
-                expanded.add(TileCoord.encode(x + 1, y));
-            }
-            if ((neighbour & NEIGHBOURS_SOUTH) != 0) {
-                expanded.add(TileCoord.encode(x, y + 1));
-            }
-            if (neighbour == NEIGHBOURS_SOUTH_EAST) {
-                expanded.add(TileCoord.encode(x + 1, y + 1));
-            }
-        }
-
         // now we use the 24 reserved bits for the tiles list..
         boolean extend = false;
-        for (int tile : expanded.toArray()) {
+        for (int tile : tiles.toArray()) {
 
             int tmpX = TileCoord.decodeX(tile);
             int tmpY = TileCoord.decodeY(tile);
@@ -224,13 +184,12 @@ abstract public class AbstractOsmMap implements OsmMap {
      * Start using the list of additional tiles instead of the bits directly in the value
      * 
      * @param val the value to extend
-     * @param tiles the List of additional tiles
+     * @param tiles the additional tiles
      * @return the updated value
      */
-    private long extendToNeighbourSet(long val, @NotNull Collection<Long> tiles) {
+    private long extendToNeighbourSet(long val, @NotNull TIntCollection tiles) {
 
-        TIntSet tileSet = decode(tiles);
-
+        TIntSet tileSet = new TIntHashSet(tiles);
         tileSet.addAll(decode(val));
 
         if ((val & TILE_MARKER_MASK) != 0) {
@@ -318,7 +277,7 @@ abstract public class AbstractOsmMap implements OsmMap {
      * @param add the additional set
      * @return the new set
      */
-    private static TIntSet merge(@NotNull TIntSet old, @NotNull TIntSet add) {
+    private static TIntSet merge(@NotNull TIntCollection old, @NotNull TIntCollection add) {
         TIntSet result = new TIntHashSet(old);
         result.addAll(add);
         return result;

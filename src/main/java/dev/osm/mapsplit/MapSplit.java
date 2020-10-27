@@ -27,7 +27,6 @@ import java.text.DateFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Deque;
@@ -37,7 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
@@ -109,7 +107,7 @@ public class MapSplit {
      */
     private Set<Long> relationMemberWayIds = null;
 
-    // a bitset telling the algorithm which tiles need to be re-renderd
+    /** a bitset telling the algorithm which tiles need to be re-rendered. Uses {@link TileCoord} encoding. */
     private final UnsignedSparseBitSet modifiedTiles = new UnsignedSparseBitSet();
 
     private final Map<Integer, UnsignedSparseBitSet> optimizedModifiedTiles = new HashMap<>();
@@ -239,7 +237,7 @@ public class MapSplit {
      * 
      * @param tiles the current tiles
      */
-    private void checkAndFill(@NotNull Collection<Long> tiles) {
+    private void checkAndFill(@NotNull TIntCollection tiles) {
 
         int minX = Integer.MAX_VALUE;
         int minY = Integer.MAX_VALUE;
@@ -247,9 +245,9 @@ public class MapSplit {
         int maxY = Integer.MIN_VALUE;
 
         // determine the min/max tile nrs
-        for (long tile : tiles) {
-            int tx = nmap.tileX(tile);
-            int ty = nmap.tileY(tile);
+        for (int tile : tiles.toArray()) {
+            int tx = TileCoord.decodeX(tile);
+            int ty = TileCoord.decodeY(tile);
 
             minX = Math.min(minX, tx);
             minY = Math.min(minY, ty);
@@ -267,22 +265,12 @@ public class MapSplit {
 
         // fill the helperSet which marks any set tile
         BitSet helperSet = new BitSet();
-        for (long tile : tiles) {
-            int tx = nmap.tileX(tile) - minX;
-            int ty = nmap.tileY(tile) - minY;
-            int neighbour = nmap.neighbour(tile);
-
+        tiles.forEach((int tile) -> {
+            int tx = TileCoord.decodeX(tile);
+            int ty = TileCoord.decodeY(tile);
             helperSet.set(tx + ty * sizeX);
-            if ((neighbour & OsmMap.NEIGHBOURS_EAST) != 0) {
-                helperSet.set(tx + 1 + ty * sizeX);
-            }
-            if ((neighbour & OsmMap.NEIGHBOURS_SOUTH) != 0) {
-                helperSet.set(tx + (ty + 1) * sizeX);
-            }
-            if (neighbour == OsmMap.NEIGHBOURS_SOUTH_EAST) {
-                helperSet.set(tx + 1 + (ty + 1) * sizeX);
-            }
-        }
+            return true;
+        });
 
         // start with tile 1,1 and fill region...
         Deque<Integer> stack = new ArrayDeque<>();
@@ -333,9 +321,8 @@ public class MapSplit {
             tx += minX;
             ty += minY;
 
-            // TODO: make this a bit nicer by delegating the id-generation to the map code
-            int c = tx << Const.MAX_ZOOM | ty;
-            tiles.add(((long) c) << HeapMap.TILE_Y_SHIFT);
+            int c = TileCoord.encode(tx, ty);
+            tiles.add(c);
             modifiedTiles.set(c);
         }
     }
@@ -442,38 +429,33 @@ public class MapSplit {
     private void addWayToMap(@NotNull Way way) {
 
         boolean modified = way.getTimestamp().after(appointmentDate);
-        Set<Long> tileList = new TreeSet<>();
+        TIntSet tileList = new TIntHashSet();
 
         // mark the latest changes made to this map
         if (way.getTimestamp().after(latestDate)) {
             latestDate = way.getTimestamp();
         }
 
-        List<Long> tiles = new ArrayList<>();
         for (WayNode wayNode : way.getWayNodes()) {
             // get tileNrs for given node
-            long tile = nmap.get(wayNode.getNodeId());
+            TIntCollection tiles = nmap.getAllTiles(wayNode.getNodeId());
 
             // don't ignore missing nodes
-            if (tile == 0) {
+            if (tiles == null) {
                 if (params.verbose) {
                     LOGGER.log(Level.INFO, "way {0} missing node {1}", new Object[] { way.getId(), wayNode.getNodeId() });
                 }
                 return;
             }
-            tiles.add(tile);
+            tileList.addAll(tiles);
         }
 
-        for (long tile : tiles) {
-            // mark tiles (and possible neighbours) as modified
-            if (modified) {
-                int tx = nmap.tileX(tile);
-                int ty = nmap.tileY(tile);
-                int neighbour = nmap.neighbour(tile);
-                setModifiedTiles(tx, ty, neighbour);
-            }
-
-            tileList.add(tile);
+        // mark tiles as modified
+        if (modified) {
+            tileList.forEach((int tile) -> {
+                modifiedTiles.set(tile);
+                return true;
+            });
         }
 
         // TODO check/verify if 8 tiles is ok or if there might be corner-cases with only 4 tiles
@@ -512,7 +494,7 @@ public class MapSplit {
 
             // update map so that the node knows about any additional
             // tile it has to be stored in
-            nmap.updateInt(wayNode.getNodeId(), tileList);
+            nmap.update(wayNode.getNodeId(), tileList);
         }
     }
 
@@ -524,7 +506,7 @@ public class MapSplit {
     private void addRelationToMap(@NotNull Relation r) {
 
         boolean modified = r.getTimestamp().after(appointmentDate);
-        Collection<Long> tileList = new TreeSet<>();
+        TIntSet tileList = new TIntHashSet();
 
         boolean nodeWarned = false; // suppress multiple warnings about missing Nodes
         boolean wayWarned = false; // suppress multiple warnings about missing Ways
@@ -537,10 +519,10 @@ public class MapSplit {
         for (RelationMember m : r.getMembers()) {
             switch (m.getMemberType()) {
             case Node:
-                long tile = nmap.get(m.getMemberId());
+                TIntCollection tiles = nmap.getAllTiles(m.getMemberId());
 
                 // The referenced node is not in our data set
-                if (tile == 0) {
+                if (tiles == null) {
                     if (params.verbose && !nodeWarned) {
                         LOGGER.log(Level.INFO, "Non-complete Relation {0} (missing a node)", r.getId());
                         nodeWarned = true;
@@ -550,13 +532,13 @@ public class MapSplit {
 
                 // mark tiles as modified
                 if (modified) {
-                    int tx = nmap.tileX(tile);
-                    int ty = nmap.tileY(tile);
-                    int neighbour = nmap.neighbour(tile);
-                    setModifiedTiles(tx, ty, neighbour);
+                    tiles.forEach((int tile) -> {
+                        modifiedTiles.set(tile);
+                        return true;
+                    });
                 }
 
-                tileList.add(tile);
+                tileList.addAll(tiles);
                 break;
 
             case Way:
@@ -579,10 +561,7 @@ public class MapSplit {
                 }
 
                 // TODO: make this a bit more generic / nicer code :/
-                list.forEach((int i) -> {
-                    tileList.add(((long) i) << HeapMap.TILE_Y_SHIFT);
-                    return true;
-                });
+                tileList.addAll(list);
                 break;
 
             case Relation:
@@ -605,10 +584,7 @@ public class MapSplit {
                     });
                 }
 
-                list.forEach((int i) -> {
-                    tileList.add(((long) i) << HeapMap.TILE_Y_SHIFT);
-                    return true;
-                });
+                tileList.addAll(list);
                 break;
             default:
                 LOGGER.log(Level.WARNING, "Unknown member type {0}", m.getMemberType());
@@ -623,12 +599,12 @@ public class MapSplit {
 
         // no need to fill tile list here as that will have already happened for any element with geometry
 
-        long val = tileList.iterator().next();
-        int tx = rmap.tileX(val);
-        int ty = rmap.tileY(val);
-
         // put relation into map with a "random" base tile
+        int anyTile = tileList.iterator().next();
+        int tx = TileCoord.decodeX(anyTile);
+        int ty = TileCoord.decodeY(anyTile);
         rmap.put(r.getId(), tx, ty, OsmMap.NEIGHBOURS_NONE);
+
         // update map so that the relation knows in which tiles it is needed
         rmap.update(r.getId(), tileList);
 

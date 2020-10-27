@@ -1,10 +1,11 @@
 package dev.osm.mapsplit;
 
-import java.util.Collection;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
 import org.jetbrains.annotations.NotNull;
+
+import gnu.trove.TIntCollection;
 
 /**
  * An HashMap in Heap memory, optimized for size to use in OSM
@@ -170,10 +171,10 @@ public class HeapMap extends AbstractOsmMap {
     /*
      * (non-Javadoc)
      * 
-     * @see OsmMap#update(long, java.util.List)
+     * @see OsmMap#update(long, TIntCollection)
      */
     @Override
-    public void update(long key, @NotNull Collection<Long> tiles) {
+    public void update(long key, @NotNull TIntCollection tiles) {
 
         int bucket = getBucket(key);
         if (bucket == -1) {

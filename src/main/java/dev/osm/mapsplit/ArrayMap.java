@@ -2,11 +2,12 @@ package dev.osm.mapsplit;
 
 import static java.lang.Math.min;
 
-import java.util.Collection;
 import java.util.stream.LongStream;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import gnu.trove.TIntCollection;
 
 /**
  * data structure that uses huge arrays with the OSM element's ID (the key) as the array index.
@@ -96,7 +97,7 @@ public final class ArrayMap extends AbstractOsmMap {
     }
 
     @Override
-    public final void update(long key, Collection<Long> tiles) {
+    public final void update(long key, @NotNull TIntCollection tiles) {
         long[] array = arrayForKey(key);
         int indexWithinArray = indexWithinArray(key);
         array[indexWithinArray] = updateValue(array[indexWithinArray], tiles);

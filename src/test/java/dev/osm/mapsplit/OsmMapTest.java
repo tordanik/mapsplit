@@ -4,7 +4,6 @@ import static java.util.stream.Collectors.toSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -14,6 +13,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import gnu.trove.list.TIntList;
 import gnu.trove.list.array.TIntArrayList;
 
 @RunWith(Parameterized.class)
@@ -56,9 +56,9 @@ public class OsmMapTest {
 
         /* update one of the values and check again */
 
-        map.update(42, List.of(
-                map.createValue(tileX + 1, tileY, OsmMap.NEIGHBOURS_NONE),
-                map.createValue(tileX, tileY + 1, OsmMap.NEIGHBOURS_NONE)));
+        map.update(42, intListOf(
+                TileCoord.encode(tileX + 1, tileY),
+                TileCoord.encode(tileX, tileY + 1)));
 
         assertEquals(3, map.getAllTiles(42).size());
 
@@ -90,7 +90,7 @@ public class OsmMapTest {
         assertEquals(0, map.tileY(value1));
         assertEquals(4, map.getAllTiles(1).size());
 
-        map.update(2, List.of(map.createValue(0, 0, OsmMap.NEIGHBOURS_NONE)));
+        map.update(2, intListOf(TileCoord.encode(0, 0)));
         assertTrue(map.getAllTiles(0).contains(0 << 16 | 0));
 
     }
@@ -99,21 +99,25 @@ public class OsmMapTest {
     @Test
     public void testLongTileLists() {
 
-        List<Long> listOfTiles = new ArrayList<>();
+        TIntList listOfTiles = new TIntArrayList();
 
         for (int i = 1; i < 1000; i++) {
 
             AbstractOsmMap map = mapSupplier.get();
 
-            listOfTiles.add(map.createValue(10000 + i, 500, OsmMap.NEIGHBOURS_NONE));
+            listOfTiles.add(TileCoord.encode(10000 + i, 500));
 
             map.put(42, 10000, 500, OsmMap.NEIGHBOURS_NONE);
-            map.update(42, new ArrayList<>(listOfTiles));
+            map.update(42, listOfTiles);
 
             assertEquals(1 + i, map.getAllTiles(42).size());
 
         }
 
+    }
+
+    private static final TIntList intListOf(int... values) {
+        return new TIntArrayList(values);
     }
 
 }

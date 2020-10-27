@@ -1,18 +1,5 @@
 package dev.osm.mapsplit;
 
-/*
- * Mapsplit - A simple but fast tile splitter for large OSM data
- * 
- * Written in 2011 by Peda (osm-mapsplit@won2.de)
- * 
- * To the extent possible under law, the author(s) have dedicated all copyright and related and neighboring rights to
- * this software to the public domain worldwide. This software is distributed without any warranty.
- * 
- * You should have received a copy of the CC0 Public Domain Dedication along with this software. If not, see
- * <http://creativecommons.org/publicdomain/zero/1.0/>.
- */
-
-import java.util.Collection;
 import java.util.stream.LongStream;
 
 import gnu.trove.TIntCollection;
@@ -63,23 +50,17 @@ public interface OsmMap {
      * update key so it knows about all tiles where it is needed. The given longs in the list are expected in this map's
      * format. Neighbourhood of the tile-IDs are evaluated.
      * 
-     * @param key the entries key (ID)
-     * @param tiles a Collection of tiles in encoded form including neighbour bits
+     * @param key  the entries key (ID)
+     * @param tiles  a collection of tiles encoded with {@link TileCoord}
      */
-    public abstract void update(long key, Collection<Long> tiles);
-
-    /**
-     * variant of {@link #update(long, Collection)} that takes individual tile coords (encoded with TileCoord)
-     * without neighbor information 
-     */
-    public abstract void updateInt(long key, TIntCollection tiles);
+    public abstract void update(long key, TIntCollection tiles);
 
     /**
      * returns a list of all tiles this key is in. This contains the base-tile, neighbours and tiles where this key is
      * connected to other keys, e.g. by a way. The format of the integer is (tileX << 16 | tileY), see {@link TileCoord}.
      * 
      * @param key the node, way or relation we're looking at
-     * @return a collection of all tiles where this key is used
+     * @return a collection of all tiles where this key is used, or null if the tile is not in the set
      */
     public abstract TIntCollection getAllTiles(long key);
 
