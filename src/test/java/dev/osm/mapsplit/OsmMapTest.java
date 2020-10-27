@@ -14,6 +14,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import gnu.trove.list.array.TIntArrayList;
+
 @RunWith(Parameterized.class)
 public class OsmMapTest {
 
@@ -49,7 +51,7 @@ public class OsmMapTest {
         assertEquals(tileX, map.tileX(value42));
         assertEquals(tileY, map.tileY(value42));
 
-        assertEquals(List.of(tileX << 16 | tileY), map.getAllTiles(42));
+        assertEquals(new TIntArrayList(new int[] {(tileX << 16 | tileY)}), map.getAllTiles(42));
         assertEquals(2, map.getAllTiles(0).size());
 
         /* update one of the values and check again */
@@ -81,7 +83,7 @@ public class OsmMapTest {
         long value0 = map.get(0);
         assertEquals(0, map.tileX(value0));
         assertEquals(0, map.tileY(value0));
-        assertEquals(List.of(0 << 16 | 0), map.getAllTiles(0));
+        assertEquals(new TIntArrayList(new int[] {(0 << 16 | 0)}), map.getAllTiles(0));
 
         long value1 = map.get(0);
         assertEquals(0, map.tileX(value1));

@@ -3,11 +3,15 @@ package dev.osm.mapsplit;
 import static java.util.stream.Collectors.toList;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
 import org.jetbrains.annotations.NotNull;
 
+import gnu.trove.TIntCollection;
+import gnu.trove.list.TIntList;
+import gnu.trove.list.array.TIntArrayList;
 import gnu.trove.set.TIntSet;
 import gnu.trove.set.hash.TIntHashSet;
 
@@ -81,7 +85,7 @@ abstract public class AbstractOsmMap implements OsmMap {
      * @see OsmMap#getAllTiles(long)
      */
     @Override
-    public List<Integer> getAllTiles(long key) {
+    public TIntCollection getAllTiles(long key) {
 
         long value = get(key);
 
@@ -93,11 +97,11 @@ abstract public class AbstractOsmMap implements OsmMap {
         int ty = tileY(value);
         int neighbour = neighbour(value);
 
-        List<Integer> result;
+        TIntList result;
 
         if ((value & TILE_EXT_MASK) != 0) {
             int idx = (int) (value & TILE_MARKER_MASK);
-            result = new ArrayList<Integer>(asList(extendedSets.getExtendedSet(idx).toArray()));
+            result = new TIntArrayList(extendedSets.getExtendedSet(idx));
         } else {
             result = parseMarker(value);
         }
@@ -120,13 +124,14 @@ abstract public class AbstractOsmMap implements OsmMap {
     }
 
     @Override
-    public void updateInt(long key, Collection<Integer> tiles) {
+    public void updateInt(long key, TIntCollection tiles) {
 
-        List<Long> longTiles = tiles.stream()
-                .map(tile -> createValue(
+        List<Long> longTiles = Arrays.stream(tiles.toArray())
+                .mapToLong(tile -> createValue(
                         TileCoord.decodeX(tile),
                         TileCoord.decodeY(tile),
                         NEIGHBOURS_NONE))
+                .boxed()
                 .collect(toList());
 
         this.update(key, longTiles);
@@ -242,22 +247,15 @@ abstract public class AbstractOsmMap implements OsmMap {
      */
     private long extendToNeighbourSet(long val, @NotNull Collection<Long> tiles) {
 
+        TIntSet tileSet = decode(tiles);
+
         if ((val & TILE_MARKER_MASK) != 0) {
-            // add current stuff to tiles list
-            List<Integer> tmpList = parseMarker(val);
-            for (int i : tmpList) {
-                long tx = TileCoord.decodeX(i);
-                long ty = TileCoord.decodeY(i);
-                long temp = tx << TILE_X_SHIFT | ty << TILE_Y_SHIFT;
-
-                tiles.add(temp);
-            }
-
+            // add current stuff to tile set
+            tileSet.addAll(parseMarker(val));
             // delete old marker from val
             val &= ~TILE_MARKER_MASK;
         }
 
-        TIntSet tileSet = decode(tiles);
         int extendedSetIndex = extendedSets.addExtendedSet(tileSet);
 
         val |= TILE_EXT_MASK;
@@ -292,8 +290,8 @@ abstract public class AbstractOsmMap implements OsmMap {
 
     }
 
-    private List<Integer> parseMarker(long value) {
-        List<Integer> result = new ArrayList<>();
+    private TIntList parseMarker(long value) {
+        TIntList result = new TIntArrayList();
         int tx = tileX(value);
         int ty = tileY(value);
 

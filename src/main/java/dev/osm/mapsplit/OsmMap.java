@@ -13,8 +13,9 @@ package dev.osm.mapsplit;
  */
 
 import java.util.Collection;
-import java.util.List;
 import java.util.stream.LongStream;
+
+import gnu.trove.TIntCollection;
 
 /**
  * This is the central data structure of Mapsplit.
@@ -71,16 +72,16 @@ public interface OsmMap {
      * variant of {@link #update(long, Collection)} that takes individual tile coords (encoded with TileCoord)
      * without neighbor information 
      */
-    public abstract void updateInt(long key, Collection<Integer> tiles);
+    public abstract void updateInt(long key, TIntCollection tiles);
 
     /**
      * returns a list of all tiles this key is in. This contains the base-tile, neighbours and tiles where this key is
-     * connected to other keys, e.g. by a way. The format of the integer is (tileX << 16 | tileY).
+     * connected to other keys, e.g. by a way. The format of the integer is (tileX << 16 | tileY), see {@link TileCoord}.
      * 
      * @param key the node, way or relation we're looking at
-     * @return a list of all tiles where this key is used
+     * @return a collection of all tiles where this key is used
      */
-    public abstract List<Integer> getAllTiles(long key);
+    public abstract TIntCollection getAllTiles(long key);
 
     /**
      * for debugging this method tells you how much of the buckets are used. A load < 0,5 is desirable for good speed

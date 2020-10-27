@@ -66,6 +66,9 @@ import org.openstreetmap.osmosis.osmbinary.file.BlockOutputStream;
 
 import crosby.binary.osmosis.OsmosisReader;
 import crosby.binary.osmosis.OsmosisSerializer;
+import gnu.trove.TIntCollection;
+import gnu.trove.set.TIntSet;
+import gnu.trove.set.hash.TIntHashSet;
 
 public class MapSplit {
 
@@ -503,7 +506,7 @@ public class MapSplit {
      * @param way the Way we are processing
      * @param tileList the List of tiles, encoded with {@link TileCoord}
      */
-    private void addExtraWayToMap(@NotNull Way way, @NotNull Collection<Integer> tileList) {
+    private void addExtraWayToMap(@NotNull Way way, @NotNull TIntCollection tileList) {
 
         for (WayNode wayNode : way.getWayNodes()) {
 
@@ -557,7 +560,7 @@ public class MapSplit {
                 break;
 
             case Way:
-                List<Integer> list = wmap.getAllTiles(m.getMemberId());
+                TIntCollection list = wmap.getAllTiles(m.getMemberId());
 
                 // The referenced way is not in our data set
                 if (list == null) {
@@ -569,15 +572,17 @@ public class MapSplit {
                 }
 
                 if (modified) {
-                    for (Integer i : list) {
+                    list.forEach((int i) -> {
                         modifiedTiles.set(i);
-                    }
+                        return true;
+                    });
                 }
 
                 // TODO: make this a bit more generic / nicer code :/
-                for (int i : list) {
+                list.forEach((int i) -> {
                     tileList.add(((long) i) << HeapMap.TILE_Y_SHIFT);
-                }
+                    return true;
+                });
                 break;
 
             case Relation:
@@ -594,14 +599,16 @@ public class MapSplit {
                 }
 
                 if (modified) {
-                    for (Integer i : list) {
+                    list.forEach((int i) -> {
                         modifiedTiles.set(i);
-                    }
+                        return true;
+                    });
                 }
 
-                for (int i : list) {
+                list.forEach((int i) -> {
                     tileList.add(((long) i) << HeapMap.TILE_Y_SHIFT);
-                }
+                    return true;
+                });
                 break;
             default:
                 LOGGER.log(Level.WARNING, "Unknown member type {0}", m.getMemberType());
@@ -793,7 +800,7 @@ public class MapSplit {
                     if (ec instanceof WayContainer) {
                         Way w = ((WayContainer) ec).getEntity();
                         if (relationMemberWayIds.contains(w.getId())) {
-                            List<Integer> tileList = wmap.getAllTiles(w.getId());
+                            TIntCollection tileList = wmap.getAllTiles(w.getId());
                             addExtraWayToMap(w, tileList);
                         }
                     }
@@ -844,9 +851,9 @@ public class MapSplit {
         // one tile
         Map<Integer, Integer> stats = new HashMap<>();
         nmap.keys().forEach((long k) -> {
-            List<Integer> tiles = nmap.getAllTiles(k);
+            TIntCollection tiles = nmap.getAllTiles(k);
             if (tiles != null) {
-                for (Integer t : tiles) {
+                for (int t : tiles.toArray()) {
                     Integer count = stats.get(t);
                     if (count != null) {
                         count++;
@@ -1229,8 +1236,8 @@ public class MapSplit {
 
                 class BoundSink implements Sink {
 
-                    Bound        overallBounds = null;
-                    Set<Integer> mappedTiles   = new HashSet<>();
+                    Bound overallBounds = null;
+                    TIntSet mappedTiles = new TIntHashSet();
 
                     /**
                      * Get the overall bounds of the data
@@ -1250,7 +1257,7 @@ public class MapSplit {
                     public void process(EntityContainer ec) {
                         long id = ec.getEntity().getId();
 
-                        Iterable<Integer> tiles;
+                        TIntCollection tiles;
 
                         if (ec instanceof NodeContainer) {
                             tiles = nmap.getAllTiles(id);
@@ -1281,7 +1288,7 @@ public class MapSplit {
 
                         if (params.nodeLimit > 0) { // quite costly, and only relevant if tile optimization is on
                             mappedTiles.clear();
-                            for (int i : tiles) {
+                            tiles.forEach((int i) -> {
                                 // map original zoom tiles to optimized ones
                                 // and remove duplicates
                                 Byte newZoom = zoomMap.get(i);
@@ -1293,18 +1300,20 @@ public class MapSplit {
                                 if (currentZoom == newZoom) {
                                     mappedTiles.add(i);
                                 }
-                            }
+                                return true;
+                            });
                             tiles = mappedTiles;
                         }
 
-                        for (int i : tiles) {
+                        tiles.forEach((int i) -> {
                             if (tileSet.get(i)) {
                                 OsmosisSerializer ser = outFiles.get(i);
                                 if (ser != null) {
                                     ser.process(ec);
                                 }
                             }
-                        }
+                            return true;
+                        });
                     }
 
                     @Override
