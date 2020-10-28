@@ -12,6 +12,8 @@ package dev.osm.mapsplit;
  * <http://creativecommons.org/publicdomain/zero/1.0/>.
  */
 
+import static java.util.Arrays.stream;
+
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -65,6 +67,8 @@ import org.openstreetmap.osmosis.osmbinary.file.BlockOutputStream;
 import crosby.binary.osmosis.OsmosisReader;
 import crosby.binary.osmosis.OsmosisSerializer;
 import gnu.trove.TIntCollection;
+import gnu.trove.list.TIntList;
+import gnu.trove.list.array.TIntArrayList;
 import gnu.trove.set.TIntSet;
 import gnu.trove.set.hash.TIntHashSet;
 
@@ -111,12 +115,6 @@ public class MapSplit {
     private final UnsignedSparseBitSet modifiedTiles = new UnsignedSparseBitSet();
 
     private final Map<Integer, UnsignedSparseBitSet> optimizedModifiedTiles = new HashMap<>();
-
-    // the serializer (OSM writers) for any modified tile
-    private Map<Integer, OsmosisSerializer> outFiles;
-
-    // output for mbtiles
-    private Map<Integer, ByteArrayOutputStream> outBlobs;
 
     // new zoom levels for tiles during optimization
     private final Map<Integer, Byte> zoomMap = new HashMap<>();
@@ -1138,6 +1136,7 @@ public class MapSplit {
                 LOGGER.log(Level.INFO, "Processing {0} tiles for zoom {1}", new Object[] { tileSet.cardinality(), currentZoom });
             }
 
+            int totalCount = 0;
             int idx = -1; //start at -1 because this will be incremented before the first use
 
             // We might call this code several times if we have more tiles
@@ -1145,65 +1144,70 @@ public class MapSplit {
             while (true) {
 
                 complete = false;
-                outFiles = new HashMap<>();
-                if (mbTiles) {
-                    outBlobs = new HashMap<>();
-                }
 
                 // Setup out-files...
-                int count = 0;
+
+                TIntList tilesToWrite = new TIntArrayList();
                 while (true) {
                     idx = tileSet.nextSetBit(UnsignedSparseBitSet.inc(idx));
-                    if (idx == -1) {
-                        // created all tiles for this zoom level
-                        break;
-                    }
+                    if (idx == -1) break; // created all tiles for this zoom level
+                    tilesToWrite.add(idx);
+                    if (tilesToWrite.size() >= params.maxFiles) break; // reached maximum number of files
+                }
 
-                    if (outFiles.get(idx) == null) {
+                totalCount += tilesToWrite.size();
 
-                        int tileX = idx >>> Const.MAX_ZOOM;
-                        int tileY = (int) (idx & Const.MAX_TILE_NUMBER);
+                int minTileX = stream(tilesToWrite.toArray()).map(TileCoord::decodeX).min().getAsInt();
+                int maxTileX = stream(tilesToWrite.toArray()).map(TileCoord::decodeX).max().getAsInt();
+                int minTileY = stream(tilesToWrite.toArray()).map(TileCoord::decodeY).min().getAsInt();
+                int maxTileY = stream(tilesToWrite.toArray()).map(TileCoord::decodeY).max().getAsInt();
 
-                        OutputStream target = null;
-                        if (mbTiles) {
-                            target = new ByteArrayOutputStream();
-                        } else {
-                            String file;
-                            if (basename.contains("%x") && basename.contains("%y")) {
-                                file = basename.replace("%x", Integer.toString(tileX)).replace("%y", Integer.toString(tileY)).replace("%z",
-                                        Integer.toString(currentZoom));
-                                if (!KNOWN_PBF_EXTS.stream().anyMatch(file::endsWith)) {
-                                    file = file + PBF_EXT;
-                                }
-                            } else {
-                                file = basename + currentZoom + "/" + tileX + "_" + tileY + PBF_EXT;
+                // the serializer (OSM writers) for any modified tile
+                OsmosisSerializer[][] outFiles = new OsmosisSerializer[maxTileX - minTileX + 1][maxTileY - minTileY + 1];
+                // output for mbtiles
+                Map<Integer, ByteArrayOutputStream> outBlobs = mbTiles ? new HashMap<>() : null;
+
+                for (int tileCoord : tilesToWrite.toArray()) {
+
+                    int tileX = TileCoord.decodeX(tileCoord);
+                    int tileY = TileCoord.decodeY(tileCoord);
+
+                    OutputStream target = null;
+                    if (mbTiles) {
+                        target = new ByteArrayOutputStream();
+                    } else {
+                        String file;
+                        if (basename.contains("%x") && basename.contains("%y")) {
+                            file = basename.replace("%x", Integer.toString(tileX)).replace("%y", Integer.toString(tileY)).replace("%z",
+                                    Integer.toString(currentZoom));
+                            if (!KNOWN_PBF_EXTS.stream().anyMatch(file::endsWith)) {
+                                file = file + PBF_EXT;
                             }
-                            File outputFile = new File(file);
-                            File parent = outputFile.getParentFile();
-                            parent.mkdirs();
-                            target = new FileOutputStream(file);
+                        } else {
+                            file = basename + currentZoom + "/" + tileX + "_" + tileY + PBF_EXT;
                         }
-
-                        OsmosisSerializer serializer = new OsmosisSerializer(new BlockOutputStream(target));
-
-                        serializer.setUseDense(true);
-                        serializer.configOmit(!metadata);
-
-                        // write out the bound for that tile
-                        Bound bound = getBound(tileX, tileY);
-                        BoundContainer bc = new BoundContainer(bound);
-                        serializer.process(bc);
-
-                        outFiles.put(idx, serializer);
-
-                        if (mbTiles) {
-                            outBlobs.put(idx, (ByteArrayOutputStream) target);
-                        }
+                        File outputFile = new File(file);
+                        File parent = outputFile.getParentFile();
+                        parent.mkdirs();
+                        target = new FileOutputStream(file);
                     }
 
-                    if ((params.maxFiles != -1) && (++count >= params.maxFiles)) {
-                        break;
+                    OsmosisSerializer serializer = new OsmosisSerializer(new BlockOutputStream(target));
+
+                    serializer.setUseDense(true);
+                    serializer.configOmit(!metadata);
+
+                    // write out the bound for that tile
+                    Bound bound = getBound(tileX, tileY);
+                    BoundContainer bc = new BoundContainer(bound);
+                    serializer.process(bc);
+
+                    outFiles[tileX - minTileX][tileY - minTileY] = serializer;
+
+                    if (mbTiles) {
+                        outBlobs.put(tileCoord, (ByteArrayOutputStream) target);
                     }
+
                 }
 
                 // Now start writing output...
@@ -1281,11 +1285,17 @@ public class MapSplit {
                             tiles = mappedTiles;
                         }
 
-                        tiles.forEach((int i) -> {
-                            if (tileSet.get(i)) {
-                                OsmosisSerializer ser = outFiles.get(i);
-                                if (ser != null) {
-                                    ser.process(ec);
+                        tiles.forEach((int tile) -> {
+                            if (tileSet.get(tile)) {
+                                int tileX = TileCoord.decodeX(tile);
+                                int tileY = TileCoord.decodeY(tile);
+                                if (tileX >= minTileX && tileX <= maxTileX && tileY >= minTileY && tileY <= maxTileY) {
+                                    if (tileX >= minTileX && tileX <= maxTileX && tileY >= minTileY && tileY <= maxTileY) {
+                                        OsmosisSerializer ser = outFiles[tileX - minTileX][tileY - minTileY];
+                                        if (ser != null) {
+                                            ser.process(ec);
+                                        }
+                                    }
                                 }
                             }
                             return true;
@@ -1322,16 +1332,16 @@ public class MapSplit {
                 }
 
                 // Finish and close files...
-                for (Entry<Integer, OsmosisSerializer> entry : outFiles.entrySet()) {
-                    OsmosisSerializer ser = entry.getValue();
+                for (int tile : tilesToWrite.toArray()) {
+                    int tileX = TileCoord.decodeX(tile);
+                    int tileY = TileCoord.decodeY(tile);
+                    OsmosisSerializer ser = outFiles[tileX - minTileX][tileY - minTileY];
                     ser.complete();
                     ser.flush();
                     ser.close();
                     if (mbTiles) {
-                        int tileX = entry.getKey() >>> Const.MAX_ZOOM;
-                        int tileY = (int) (entry.getKey() & Const.MAX_TILE_NUMBER);
                         int y = ymax - tileY - 1; // TMS scheme
-                        ByteArrayOutputStream blob = outBlobs.get(entry.getKey());
+                        ByteArrayOutputStream blob = outBlobs.get(tile);
                         try {
                             w.addTile(blob.toByteArray(), currentZoom, tileX, y);
                         } catch (MBTilesWriteException e) { // NOSONAR
@@ -1342,12 +1352,8 @@ public class MapSplit {
                 }
 
                 if (params.verbose) {
-                    LOGGER.log(Level.INFO, "Wrote {0} tiles, continuing with next block of tiles", outFiles.size());
-                }
-                // remove mappings form this pass
-                outFiles.clear();
-                if (mbTiles) {
-                    outBlobs.clear();
+                    LOGGER.log(Level.INFO, "Wrote {0} of {1} tiles for zoom {2}, continuing with next block of tiles",
+                            new Object[] { totalCount, tileSet.cardinality(), currentZoom });
                 }
                 if (idx == -1) {
                     // written all tiles for this zoom level

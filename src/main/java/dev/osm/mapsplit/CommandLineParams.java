@@ -196,7 +196,7 @@ final class CommandLineParams {
                 String tmp = line.getOptionValue("maxfiles");
                 maxFiles = Integer.valueOf(tmp);
             } else {
-                maxFiles = -1;
+                maxFiles = Integer.MAX_VALUE;
             }
 
             double border = 0.0;
